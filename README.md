@@ -8,3 +8,5 @@ It also require to have juj fbcp-ili9341 driver running with backlight control a
 - compile.sh : Compile cpp file (run this first).
 - install.sh : Install service (need restart)
 - remove.sh : Remove service 
+
+Don't miss to edit nns-freeplay-backlight-daemon.service set path and pin correctly.
