@@ -24,7 +24,7 @@ char gpio_buffer[4];									//gpio read buffer
 int gpio_interval=-1;									//gpio check interval
 int gpio_value;												//gpio value
 int backlight_last_state=-1;					//gpio last update state
-
+bool gpio_wrong_direction = true;			//gpio wrong direction
 
 void show_usage(void){
 	printf("Example : ./nns-freeplay-backlight-daemon -pin 31 -interval 200\n");
@@ -55,8 +55,16 @@ int main(int argc, char *argv[]){
 	
 	//check pin direction
 	temp_filehandle = fopen("direction","r"); fgets(gpio_buffer,sizeof(gpio_buffer),temp_filehandle); fclose(temp_filehandle); //read gpio direction
-	if(strcmp(gpio_buffer,"in")==0){printf("Failed, gpio pin direction is %s\n",gpio_buffer);return(1); //check gpio direction
-	}/*else{printf("GPIO: direction is %s\n",gpio_buffer);}*/
+	
+	while(gpio_wrong_direction){
+		if(strcmp(gpio_buffer,"in")==0){
+			printf("Failed, gpio pin direction is %s\n",gpio_buffer); //check gpio direction
+			sleep(2);
+		}else{
+			printf("GPIO: direction is %s\n",gpio_buffer);
+			gpio_wrong_direction = false;
+		}
+	}
 	
 	//check if pin is active low
 	temp_filehandle = fopen("active_low","r"); fgets(gpio_buffer,sizeof(gpio_buffer),temp_filehandle); fclose(temp_filehandle); //read gpio active low
