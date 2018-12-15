@@ -8,7 +8,7 @@ After=basic.target
 User=root
 Group=root
 Type=simple
-ExecStart=/bin/bash /home/pi/NNS/FreeplayBacklightDaemon/nns-freeplay-backlight-daemon.sh
+ExecStart=/home/pi/NNS/FreeplayBacklightDaemon/nns-freeplay-backlight-daemon -pin 31 -interval 250
 TimeoutStartSec=0
 # write to journal or within script to separate log file
 # StandardOutput=/home/pi/NNS/FreeplayBacklightDaemon/nns-freeplay-backlight-daemon-out.log
