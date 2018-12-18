@@ -1,19 +1,17 @@
 [Unit]
 Description=NNS FreeplayBacklightDaemon
 After=basic.target
-#After=meadiacenter.service
+StartLimitIntervalSec=0
 
 [Service]
-# If User and Group are not specified, then by default systemd ExecStart runs as root
-User=root
-Group=root
 Type=simple
+Restart=always
+RestartSec=2
+User=root
 ExecStart=/home/pi/NNS/FreeplayBacklightDaemon/nns-freeplay-backlight-daemon -pin 31 -interval 250
-TimeoutStartSec=0
 # write to journal or within script to separate log file
 # StandardOutput=/home/pi/NNS/FreeplayBacklightDaemon/nns-freeplay-backlight-daemon-out.log
 # StandardError=/home/pi/NNS/FreeplayBacklightDaemon/nns-freeplay-backlight-daemon-err.log
-Restart=Always
 
 [Install]
 WantedBy=multi-user.target
