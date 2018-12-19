@@ -45,6 +45,16 @@ int main(int argc, char *argv[]){
 	if(gpio_pin<0){printf("Failed, missing pin argument\n");show_usage();return 1;} //user miss some needed arguments
 	if(gpio_interval<100||gpio_interval>600){printf("Warning, wrong cheking interval set, setting it to 200msec\n");gpio_interval=200;} //wrong interval
 	
+	if(access("/home/pi/Freeplay/setPCA9633/fpbrightness.val",R_OK)!=0){
+			printf("fpbrightness.val not found, Creating now one\n");
+			temp_filehandle=fopen("/home/pi/Freeplay/setPCA9633/fpbrightness.val","wb");
+			fprintf(temp_filehandle,"%d",255);
+			fclose(temp_filehandle); //create file
+		}
+	
+	
+	
+	
 	if(access(gpio_path,R_OK)!=0){ //gpio not accessible, try to export
 		printf("%s not accessible, trying export\n",gpio_path);
 		temp_filehandle = fopen("/sys/class/gpio/export","wo"); fprintf(temp_filehandle,"%d", gpio_pin); fclose(temp_filehandle); //try export gpio
@@ -70,8 +80,6 @@ int main(int argc, char *argv[]){
 	temp_filehandle = fopen("active_low","r"); fgets(gpio_buffer,sizeof(gpio_buffer),temp_filehandle); fclose(temp_filehandle); //read gpio active low
 	if(strcmp(gpio_buffer,"1")==0){gpio_activelow=true;} //parse gpio active low
 	//printf("GPIO: active_low is %s\n",gpio_buffer);
-	
-	//snprintf(omx_exec_path,sizeof(omx_exec_path),"omxplayer --no-osd --no-keys --alpha 150 --layer 2000 --win 0,0,%i,%i --align center --font-size 750 --no-ghost-box --subtitles \"%s\" \"%s/black.avi\" >/dev/null 2>&1",screen_width,bar_height,str_path,program_path); //parse command line for omx
 	
 	while(true){
 		chdir(gpio_path); //change directory to gpio sysfs
