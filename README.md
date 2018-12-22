@@ -5,9 +5,9 @@ It also require to have juj fbcp-ili9341 driver running with backlight control a
 
 # History
 
-0.1a : Initial release.
-0.1b : Change way gpio cheching work.
-0.1c : Add evdev support, refresh device list each 15sec, all 'event' checked during 0.2sec.
+- 0.1a : Initial release.
+- 0.1b : Change way gpio cheching work.
+- 0.1c : Add evdev support, refresh device list each 15sec, all 'event' checked during 0.2sec.
 
 
 # Provided scripts :
