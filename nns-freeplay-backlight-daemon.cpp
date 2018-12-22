@@ -12,6 +12,8 @@ Monitor gpio pin to turn on and off lcd backlight
 #include <unistd.h>
 #include <cstring>
 #include <limits.h>
+#include <time.h> 
+#include <dirent.h> 
 
 
 
@@ -25,6 +27,17 @@ int gpio_interval=-1;									//gpio check interval
 int gpio_value;												//gpio value
 int backlight_last_state=-1;					//gpio last update state
 bool gpio_wrong_direction = true;			//gpio wrong direction
+
+char pbuffer[20];													//buffer use to read process pipe
+DIR *inputdir;														//input dir handle
+struct dirent *inputdir_cnt;							//input dir contener
+int input_listcheck_interval = 15;				//interval to refresh input list
+unsigned int input_listcheck_start = 0;		//time of last /dev/input/ check
+int input_found = 0;											//count input device found
+bool input_detected = false;							//user input detected
+char input_cmd_tmp[PATH_MAX];							//temporary array to store event
+char input_cmd[PATH_MAX];									//array to store event command
+
 
 void show_usage(void){
 	printf("Example : ./nns-freeplay-backlight-daemon -pin 31 -interval 200\n");
@@ -71,7 +84,7 @@ int main(int argc, char *argv[]){
 			printf("Failed, gpio pin direction is %s\n",gpio_buffer); //check gpio direction
 			sleep(2);
 		}else{
-			printf("GPIO: direction is %s\n",gpio_buffer);
+			printf("GPIO: direction is %s\n",gpio_buffer); //debug
 			gpio_wrong_direction = false;
 		}
 	}
@@ -79,18 +92,52 @@ int main(int argc, char *argv[]){
 	//check if pin is active low
 	temp_filehandle = fopen("active_low","r"); fgets(gpio_buffer,sizeof(gpio_buffer),temp_filehandle); fclose(temp_filehandle); //read gpio active low
 	if(strcmp(gpio_buffer,"1")==0){gpio_activelow=true;} //parse gpio active low
-	//printf("GPIO: active_low is %s\n",gpio_buffer);
+	printf("GPIO: active_low is %s\n",gpio_buffer); //debug
 	
 	while(true){
 		chdir(gpio_path); //change directory to gpio sysfs
 		temp_filehandle = fopen("value","r"); fgets(gpio_buffer,sizeof(gpio_buffer),temp_filehandle); fclose(temp_filehandle); //read gpio value
 		gpio_value=atoi(gpio_buffer); //parse gpio value
-		if(backlight_last_state!=gpio_value){
-			if((gpio_value==0&&!gpio_activelow)||(gpio_value==1&&gpio_activelow)){ //gpio button pressed
+		
+		input_detected=false;
+		if((time(NULL) - input_listcheck_start)>input_listcheck_interval){ //time to refresh input list
+			input_listcheck_start=time(NULL); //update start time
+		  input_found=0; //reset input count
+			inputdir = opendir("/dev/input/"); //open dir handle
+		  if(inputdir){ //success
+		  	strcpy(input_cmd,"bash -c '"); //start building command
+		    while((inputdir_cnt = readdir(inputdir)) != NULL){ //scan input folder
+		      if(strncmp(inputdir_cnt->d_name,"event",5)==0){ //filename start with 'event'
+		      	input_found++; //increment input count
+		      	snprintf(input_cmd_tmp,sizeof(input_cmd_tmp),"([ -e /dev/input/%s ] && timeout 0.2s cat /dev/input/%s;) & ",inputdir_cnt->d_name,inputdir_cnt->d_name); //build temporary command
+		      	//snprintf(input_cmd_tmp,sizeof(input_cmd_tmp),"cat /dev/input/%s & ",inputdir_cnt->d_name); //build temporary command
+		      	strcat(input_cmd,input_cmd_tmp); //concatenate command and temporary command
+		      }
+		    }
+		    input_cmd[strlen(input_cmd)-3]=0; //trim last ' & '
+		    strcat(input_cmd,"'"); //complete command line
+		    closedir(inputdir); //close dir handle
+		    //printf("Refresh input device list : %i device(s) found\n",input_found); //debug
+		    //printf("Rebuild command: %s\n\n",input_cmd); //debug
+		  }else{printf("Failed to open /dev/input/\n");} //oups
+		}
+		
+		if(input_found>0){ //if input device found
+			temp_filehandle = popen(input_cmd, "r"); //open process pipe
+			if(temp_filehandle!=NULL){ //if process not fail
+				if(fgets(pbuffer,16,temp_filehandle)){input_detected=true;} //if output detected
+		  	pclose(temp_filehandle); //close process pipe
+			}
+		}
+		
+		if(backlight_last_state!=gpio_value||input_detected){
+			if(((gpio_value==0&&!gpio_activelow)||(gpio_value==1&&gpio_activelow))&&!input_detected){ //gpio button pressed
 				//printf("turn backlight off\n");
+				//if(input_detected){printf("backlight off, user input detected\n");} //debug
 				system("/home/pi/Freeplay/setPCA9633/setPCA9633 --verbosity=0 --i2cbus=1 --address=0x62 --mode1=0x01 --mode2=0x15 --led0=PWM --pwm0=0x00 > /dev/null");
 			}else{
 				//printf("turn backlight on\n");
+				//if(input_detected){printf("backlight on, user input detected\n");} //debug
 				system("/home/pi/Freeplay/setPCA9633/setPCA9633 --verbosity=0 --i2cbus=1 --address=0x62 --mode1=0x01 --mode2=0x15 --led0=PWM --pwm0=0x$(printf \"%x\\n\" $(cat /home/pi/Freeplay/setPCA9633/fpbrightness.val)) > /dev/null");
 			}
 			backlight_last_state=gpio_value;
