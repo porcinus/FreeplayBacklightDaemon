@@ -1,7 +1,7 @@
 # FreeplayBacklightDaemon
 
 This programs is design to work aside of Freeplay setPCA9633 on Raspberry Pi 3 on Freeplay Zero/CM3 platform (with installed backlight control).
-It also require to have juj fbcp-ili9341 driver running with backlight control and backlight pin set.
+It also require to have juj fbcp-ili9341 driver running with backlight control and backlight pin set to put backlight in 'sleep mode', wake is manage by backlight pin and evdev checking.
 
 
 # Provided scripts :
