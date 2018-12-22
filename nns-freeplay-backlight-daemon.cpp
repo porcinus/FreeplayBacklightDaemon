@@ -1,6 +1,6 @@
 /*
 NNS @ 2018
-nns-freeplay-backlight-daemon v0.1b
+nns-freeplay-backlight-daemon v0.1c
 Monitor gpio pin to turn on and off lcd backlight
 */
 
