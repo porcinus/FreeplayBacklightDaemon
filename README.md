@@ -13,7 +13,7 @@ It also require to have juj fbcp-ili9341 driver running with backlight control a
 
 
 # Provided scripts :
-- compile.sh : Compile cpp file (run this first).
+- compile.sh : Compile cpp file (run this first), require libpthread-dev.
 - install.sh : Install service (need restart).
 - remove.sh : Remove service.
 
