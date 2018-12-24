@@ -22,7 +22,7 @@ Monitor gpio pin and evdev input to turn on and off lcd backlight
 #include <linux/input.h>
 
 
-int debug_mode=2; //program is in debug mode, 0=no 1=low 2=full
+int debug_mode=0; //program is in debug mode, 0=no 1=low 2=full
 
 //input section
 pthread_t input_thread; 									//input thread id
