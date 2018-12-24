@@ -1,6 +1,6 @@
 /*
 NNS @ 2018
-nns-freeplay-backlight-daemon v0.2a
+nns-freeplay-backlight-daemon v0.2b
 Monitor gpio pin and evdev input to turn on and off lcd backlight
 */
 
@@ -17,31 +17,31 @@ Monitor gpio pin and evdev input to turn on and off lcd backlight
 
 #include <pthread.h>
 #include <sys/time.h>
+#include <signal.h>
 
 #include <linux/input.h>
 
 
-int debug_mode=0; //program is in debug mode, 0=no 1=low 2=full
+int debug_mode=2; //program is in debug mode, 0=no 1=low 2=full
 
 //input section
 pthread_t input_thread; 									//input thread id
 bool input_check=true;										//monitor input check
 int input_thread_rc=-1; 									//input thread return code
-long long input_tmp_timestamp = 0; 				//temporary input timestamp
 int input_listcheck_interval = 15000; 		//interval to refresh input list in msec
 long long input_listcheck_start = 0; 			//timestamp of last /dev/input/ check
 int input_device_found = -1; 							//count input device found
 DIR *input_device_dir_handle; 						//input dir handle
 struct dirent *input_device_dir_cnt; 			//input dir contener
 char input_device_list[31][PATH_MAX]; 		//input device path array
-int input_device_filehandle; 							//file handle
+int input_device_filehandle[31]; 							//file handle
 fd_set input_device_filedecriptor;				//file descriptor
+int input_device_highfd;									//file descriptor higher fd
 bool input_event_readcomplete=false;			//use for input event read timeout
 struct timeval input_event_timeout;				//use to set event read timeout
 int input_event_read_return;							//use for select in event read loop	
 struct input_event input_event_scan[64]; 			//use to scan event input
-unsigned int input_event_size; 						//use to store event input size
-//int input_event_sleep = 10; 						//sleep duration between each input check in msec, higher value create a 'spam' effect
+unsigned int input_event_size[31]; 						//use to store event input size
 int input_event_duration = 200; 					//use for input event read timeout in msec
 long long input_event_detected = 0; 			//timestamp of last detected input
 
@@ -68,6 +68,7 @@ int input_event_forced_wake_duration = 60;	//wake forced duration if input detec
 
 
 
+
 long long timestamp_msec(){ //https://stackoverflow.com/questions/3756323/how-to-get-the-current-time-in-milliseconds-from-c-in-linux
     struct timeval te; 
     gettimeofday(&te, NULL); // get current time
@@ -80,62 +81,77 @@ void *input_routine(void *){ //input routine
 	printf("input thread (%lu) started\n",input_thread); //debug
 	
 	while(input_thread_rc>-1){
-		input_tmp_timestamp=timestamp_msec(); //timestamp backup
-		if((input_tmp_timestamp - input_listcheck_start)>input_listcheck_interval){ //time to refresh input list
-			if(debug_mode){printf("input device : %lli : outdated device(s) list\n",input_tmp_timestamp);} //debug
-			input_listcheck_start=input_tmp_timestamp; //update start time
-			input_device_found=-1; //reset input device counter
-			input_device_dir_handle = opendir("/dev/input/"); //open dir handle
-			if(input_device_dir_handle){ //no problem opening dir handle
-				while((input_device_dir_cnt=readdir(input_device_dir_handle))!=NULL){ //scan input folder
-					if(strncmp(input_device_dir_cnt->d_name,"event",5)==0){ //filename start with 'event'
-						input_device_found++; //increment input count
-						strcpy(input_device_list[input_device_found],"/dev/input/"); //start building device path
-						strcat(input_device_list[input_device_found],input_device_dir_cnt->d_name); //concatenate device path
-						if(debug_mode){printf("input device : %lli : device : %s\n",input_tmp_timestamp,input_device_list[input_device_found]);} //debug
+		if(debug_mode){printf("input device : %lli : refresh device(s) list\n",timestamp_msec());} //debug
+		input_listcheck_start=timestamp_msec(); //update start time
+		input_device_found=-1; //reset input device counter
+		input_device_dir_handle = opendir("/dev/input/"); //open dir handle
+		if(input_device_dir_handle){ //no problem opening dir handle
+			while((input_device_dir_cnt=readdir(input_device_dir_handle))!=NULL){ //scan input folder
+				if(strncmp(input_device_dir_cnt->d_name,"event",5)==0){ //filename start with 'event'
+					input_device_found++; //increment input count
+					strcpy(input_device_list[input_device_found],"/dev/input/"); //start building device path
+					strcat(input_device_list[input_device_found],input_device_dir_cnt->d_name); //concatenate device path
+					if(debug_mode){printf("input device : %lli : device : %s\n",timestamp_msec(),input_device_list[input_device_found]);} //debug
+				}
+			}
+			if(debug_mode){printf("input device : %lli : refresh complete : %i device(s) found(s)\n",timestamp_msec(),input_device_found+1);} //debug
+			closedir(input_device_dir_handle); //close dir handle
+		}else{if(debug_mode){printf("input device : failed to open /dev/input/\n");}} //fail to open dir handle
+		
+		if(input_device_found>-1){
+			for(int input_device_loop=0;input_device_loop<input_device_found+1;input_device_loop++){ //open each file handle loop
+				if(access(input_device_list[input_device_loop],R_OK)==0){input_device_filehandle[input_device_loop]=open(input_device_list[input_device_loop],O_RDONLY); //open input device file handle
+				}else{if(debug_mode){printf("input device : %lli : failed to open %s, skip\n",timestamp_msec(),input_device_list[input_device_loop]);}} //file not more exist
+			}
+			
+			while(((timestamp_msec()-input_listcheck_start)<input_listcheck_interval)&&input_device_found>-1){ //loop until refresh input list is needed
+				input_event_timeout.tv_sec=0; //set select sec timout
+		    input_event_timeout.tv_usec=input_event_duration*1000; //set select usec timout
+				input_device_highfd=-1;
+				FD_ZERO(&input_device_filedecriptor); //clear file desciptor set
+				for(int input_device_loop=0;input_device_loop<input_device_found+1;input_device_loop++){ //set all file descriptor
+					if(access(input_device_list[input_device_loop],R_OK)==0){
+						FD_SET(input_device_filehandle[input_device_loop],&input_device_filedecriptor); //add descriptor to the set
+						input_device_highfd=input_device_filehandle[input_device_loop];
+					}else{
+						close(input_device_filehandle[input_device_loop]);
 					}
 				}
-				if(debug_mode){printf("input device : %lli : refresh complete : %i device(s) found(s)\n",input_tmp_timestamp,input_device_found+1);} //debug
-				closedir(input_device_dir_handle); //close dir handle
-			}else{if(debug_mode){printf("input device : failed to open /dev/input/\n");}} //fail to open dir handle
-		}
-		
-		//if(debug_mode>1){printf("input device : %lli : start reading input device(s)\n",input_tmp_timestamp);} //debug
-		if(input_device_found>-1){
-			for(int input_device_loop=0;input_device_loop<input_device_found+1;input_device_loop++){
-				if(access(input_device_list[input_device_loop],R_OK)==0){ //input device still exist
-					input_device_filehandle=-1;
-					input_device_filehandle=open(input_device_list[input_device_loop], O_RDONLY); //open input device file handle
-					if(input_device_filehandle>=0){ //successful input device file handle
-						FD_ZERO(&input_device_filedecriptor); //clear file handle set
-				    FD_SET(input_device_filehandle, &input_device_filedecriptor); //add descriptor to the set
-				    input_event_timeout.tv_sec=0; //set select sec timout
-				    input_event_timeout.tv_usec=input_event_duration*1000; //set select usec timout
-						input_event_readcomplete=false; //reset
-						while(!input_event_readcomplete){
-							input_event_read_return=select(input_device_filehandle+1,&input_device_filedecriptor,NULL,NULL,&input_event_timeout); //use to bypass non blocking mode
-							if(input_event_read_return==-1){ //select failed
-								if(debug_mode>1){printf("input device : %lli : %s : select failed\n",timestamp_msec(),input_device_list[input_device_loop]);} //debug
-							}else if(input_event_read_return){ //data is available to read
-								input_event_size = read(input_device_filehandle,&input_event_scan,sizeof(struct input_event)*64); //read input device
-								if(input_event_size < sizeof(struct input_event)){ //read wrong size, failed
-									if(debug_mode>1){printf("input device : %lli : %s : error, wrong size : need %u bytes, got %u\n",timestamp_msec(),input_device_list[input_device_loop],sizeof(struct input_event),input_event_size);} //debug
-								}else{ //no problem
-									for(int i=0;i<input_event_size/sizeof(struct input_event);i++){ //if multiple input in a small time
-										if(input_event_scan[i].type>0&&input_event_scan[i].type<=0x20&&input_event_scan[i].type!=3){ //https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h, don't monitor sync, abs or wrong type
-											input_event_detected=input_event_scan[i].time.tv_sec*1000LL + input_event_scan[i].time.tv_usec/1000; //register last detected input
-											if(debug_mode){printf("input device : %lli : %s : input detected, type: %i, code: %i, value: %i\n",input_event_detected,input_device_list[input_device_loop],input_event_scan[i].type,input_event_scan[i].code,input_event_scan[i].value);} //debug
+				
+				input_event_read_return=1; //trick
+				while(input_event_read_return&&input_device_found>-1){ //input read loop
+					input_event_read_return=select(input_device_highfd+1,&input_device_filedecriptor,NULL,NULL,&input_event_timeout); //use to bypass non blocking mode
+					if(input_event_read_return&&input_device_found>-1){
+						for(int input_device_loop=0;input_device_loop<input_device_found+1;input_device_loop++){ //select each file handle loop
+							if(access(input_device_list[input_device_loop],R_OK)==0){ //file exist
+								if(FD_ISSET(input_device_filehandle[input_device_loop],&input_device_filedecriptor)){ //data receive for this handle
+									input_event_size[input_device_loop] = read(input_device_filehandle[input_device_loop],&input_event_scan,sizeof(struct input_event)*64); //read input device
+									if(input_event_size[input_device_loop] < sizeof(struct input_event)){ //read wrong size, failed
+										if(debug_mode>1){printf("input device : %lli : %s : error, wrong size : need %u bytes, got %u\n",timestamp_msec(),input_device_list[input_device_loop],sizeof(struct input_event),input_event_size);} //debug
+									}else{ //no problem
+										if(input_event_size[input_device_loop]!=-1){ //avoid sigfault is a input is disconnected
+											for(int i=0;i<input_event_size[input_device_loop]/sizeof(struct input_event);i++){ //if multiple input in a small time
+												if(sizeof(input_event_scan[i])==sizeof(struct input_event)){
+													if(input_event_scan[i].type>0&&input_event_scan[i].type<=0x20&&input_event_scan[i].type!=3){ //https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h, don't monitor sync, abs or wrong type
+														input_event_detected=input_event_scan[i].time.tv_sec*1000LL + input_event_scan[i].time.tv_usec/1000; //register last detected input
+														if(debug_mode){printf("input device : %lli : %s : input detected, type: %i, code: %i, value: %i\n",input_event_detected,input_device_list[input_device_loop],input_event_scan[i].type,input_event_scan[i].code,input_event_scan[i].value);} //debug
+													}
+												}
+											}
 										}
 									}
 								}
-							}else{input_event_readcomplete=true;} //timeout
+							}else{ //a input is disconnected, force list update
+								if(debug_mode){printf("input device : %lli : %s : error, device no more exist, force list update\n",timestamp_msec(),input_device_list[input_device_loop]);}
+								input_device_found=-1; //reset device count
+							}
 						}
-						close(input_device_filehandle); //close input device file handle
-					}else{if(debug_mode){printf("input device : %lli : failed to read %s, skip\n",input_tmp_timestamp,input_device_list[input_device_loop]);}} //failed input device file handle
-				}else{if(debug_mode){printf("input device : %lli : failed to open %s, skip\n",input_tmp_timestamp,input_device_list[input_device_loop]);}} //input device no more exist
+					}
+				}
 			}
+			for(int input_device_loop=0;input_device_loop<input_device_found+1;input_device_loop++){close(input_device_filehandle[input_device_loop]);} //close each input device file handle loop
 		}else{
-			if(debug_mode){printf("input device : %lli : no input device found\n",input_tmp_timestamp);} //debug
+			if(debug_mode){printf("input device : %lli : no input device found\n",timestamp_msec());} //debug
 			sleep(5); //sleep 5 sec if no input device found
 		}
 	}
@@ -230,7 +246,7 @@ int main(int argc, char *argv[]){ //main
 	
 	if(gpio_pin<0){printf("Failed, missing pin argument\n");show_usage();return 1;} //user miss some needed arguments
 	if(gpio_interval<100||gpio_interval>600){printf("Warning, wrong gpio interval set, setting it to 500msec\n");gpio_interval=500;} //wrong interval
-	if(input_check&&(input_event_duration<50||input_event_duration>200)){printf("Warning, wrong input interval set, setting it to 100msec\n");input_event_duration=100;} //wrong interval
+	if(input_check&&(input_event_duration<50||input_event_duration>200)){printf("Warning, wrong input interval set, setting it to 100msec\n");input_event_duration=200;} //wrong interval
 	if(!input_check){printf("Input device monitoring disable\n");input_event_duration=100;} //wrong interval
 	
 	if(access("/home/pi/Freeplay/setPCA9633/fpbrightness.val",R_OK)!=0){ //fpbrightness.val not exist
