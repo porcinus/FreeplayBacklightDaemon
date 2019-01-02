@@ -1,25 +1,20 @@
 /*
 NNS @ 2018
-nns-freeplay-backlight-daemon v0.2b
+nns-freeplay-backlight-daemon
 Monitor gpio pin and evdev input to turn on and off lcd backlight
 */
+const char programversion[]="0.2b";
 
-
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <cstring>
-#include <limits.h>
-#include <errno.h>
-//#include <time.h> 
-#include <dirent.h> 
-
-#include <pthread.h>
-#include <sys/time.h>
-#include <signal.h>
-
-#include <linux/input.h>
+#include <fcntl.h>  //file io
+#include <stdio.h> //stream io
+#include <stdlib.h> //standard
+#include <unistd.h> //standard
+#include <cstring> //string
+#include <limits.h> //system limits
+#include <dirent.h>  //dir
+#include <pthread.h> //pthread
+#include <sys/time.h> //time
+#include <linux/input.h> //input library
 
 
 int debug_mode=0; //program is in debug mode, 0=no 1=low 2=full
@@ -34,15 +29,14 @@ int input_device_found = -1; 							//count input device found
 DIR *input_device_dir_handle; 						//input dir handle
 struct dirent *input_device_dir_cnt; 			//input dir contener
 char input_device_list[31][PATH_MAX]; 		//input device path array
-int input_device_filehandle[31]; 							//file handle
+int input_device_filehandle[31]; 					//file handle
 fd_set input_device_filedecriptor;				//file descriptor
 int input_device_highfd;									//file descriptor higher fd
-bool input_event_readcomplete=false;			//use for input event read timeout
 struct timeval input_event_timeout;				//use to set event read timeout
-int input_event_read_return;							//use for select in event read loop	
-struct input_event input_event_scan[64]; 			//use to scan event input
-unsigned int input_event_size[31]; 						//use to store event input size
 int input_event_duration = 200; 					//use for input event read timeout in msec
+int input_event_read_return;							//use for select in event read loop	
+struct input_event input_event_scan[64]; 	//use to scan event input
+unsigned int input_event_size[31]; 				//use to store event input size
 long long input_event_detected = 0; 			//timestamp of last detected input
 
 
@@ -224,6 +218,7 @@ void *gpio_routine(void *){ //gpio routine
 
 void show_usage(void){
 	printf("Example : ./nns-freeplay-backlight-daemon -pin 31 -interval 200 -noinput -debug 1\n");
+	printf("Version: %s\n",programversion);
 	printf("Options:\n");
 	printf("\t-pin, gpio pin number to monitor\n");
 	printf("\t-interval, optional, gpio pin checking interval in msec, 500 if not set\n");
