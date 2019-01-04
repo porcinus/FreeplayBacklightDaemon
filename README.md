@@ -25,3 +25,7 @@ Don't miss to edit nns-freeplay-backlight-daemon.service set path and pin correc
 Follow instructions provided (https://github.com/juj/fbcp-ili9341/).
 
 Replace 'cmake [options] ..' by 'cmake -DARMV8A=ON -DFREEPLAYTECH_WAVESHARE32B=ON -DSPI_BUS_CLOCK_DIVISOR=6 -DDISPLAY_BREAK_ASPECT_RATIO_WHEN_SCALING=ON -DUSE_DMA_TRANSFERS=ON -DBACKLIGHT_CONTROL=ON -DGPIO_TFT_BACKLIGHT=31 -DSTATISTICS=0 ..'
+
+Some DMA conflict can occurs, for example emulator like Reicast use DMA too.
+
+To avoid/limit troubles, once driver is compiled, run './build/fbcp-ili9341' thru ssh and run some emulator. If driver crashes, keep emulator running, restart driver and it will provide the list of DMA channels available, then add to compilation line '-DDMA_TX_CHANNEL=<num> -DDMA_RX_CHANNEL=<num>' according to available channel, recompile and restart driver.
