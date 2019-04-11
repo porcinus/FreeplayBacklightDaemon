@@ -10,7 +10,6 @@ It also require to have juj fbcp-ili9341 driver running with backlight control a
 - 0.1c : Add evdev support, refresh device list each 15sec, all 'event' checked during 0.2sec one by one.
 - 0.2a : Now using pthread, almost all code rework, use a test, not stable, many input missed, sigfault if a input device is 'removed', 50% less cpu usage than 0.1c.
 - 0.2b : stable, almost no key input missed, relative move still not work, sigfault fixed, 30% less cpu usage than 0.2a.
-- 0.2c : [PLANNED] addition of a sail safe (if the main process encounter a sigfault).
 
 # Provided scripts :
 - compile.sh : Compile cpp file (run this first), require libpthread-dev.
